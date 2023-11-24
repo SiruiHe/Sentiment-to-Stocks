@@ -18,7 +18,8 @@ daily_data_BERT = pd.read_csv('./data/dataset_for_model.csv', index_col=0)
 date = daily_data_BERT['Date']
 date = pd.to_datetime(date)
 
-features = daily_data_BERT.drop(['Date','P_news_pos', 'P_news_neg', 'P_op_pos', 'P_op_neg'], axis=1)
+# features = daily_data_BERT.drop(['Date','P_news_pos', 'P_news_neg', 'P_op_pos', 'P_op_neg'], axis=1)
+features = daily_data_BERT.drop(['Date'], axis=1)
 # Open作为预测目标
 target = daily_data_BERT['Open']
 features.tail()
@@ -52,6 +53,8 @@ joblib.dump(scaler_target, './model/scaler_target.pkl')
 # Create new DataFrames with the scaled features and target
 scaled_features_df = pd.DataFrame(scaled_features, columns=features.columns)
 scaled_target_df = pd.DataFrame(scaled_target, columns=['Open'])
+
+print(scaled_features.shape)
 
 
 # In[210]:
@@ -98,8 +101,7 @@ def create_sequences(features, targets, seq_length):
 # In[212]:
 
 # exp
-# seq_lengths = [10, 15, 20, 25, 30, 35, 40]
-seq_lengths = [45, 50, 55]
+seq_lengths = [10, 15, 20, 25, 30, 35, 40, 45, 50]
 rmse_results = []
 
 for seq_length in seq_lengths:
