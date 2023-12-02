@@ -7,7 +7,9 @@
 
 
 import pandas as pd
-daily_data_BERT = pd.read_csv('./data/dataset_for_model.csv', index_col=0)
+# daily_data = pd.read_csv('./data/dataset_FinBERT_sliding_window.csv')
+# daily_data = pd.read_csv('./data/dataset_FinBERT.csv')
+daily_data = pd.read_csv('./data/dataset_VADER.csv')
 
 
 # In[223]:
@@ -15,13 +17,13 @@ daily_data_BERT = pd.read_csv('./data/dataset_for_model.csv', index_col=0)
 
 # 选择特征和目标
 # 保留原本的index，将'Date'列单独提取出来保存
-date = daily_data_BERT['Date']
+date = daily_data['Date']
 date = pd.to_datetime(date)
 
 # features = daily_data_BERT.drop(['Date','P_news_pos', 'P_news_neg', 'P_op_pos', 'P_op_neg'], axis=1)
-features = daily_data_BERT.drop(['Date'], axis=1)
+features = daily_data.drop(['Date'], axis=1)
 # Open作为预测目标
-target = daily_data_BERT['Open']
+target = daily_data['Open']
 features.tail()
 
 
@@ -105,6 +107,21 @@ seq_lengths = [10, 15, 20, 25, 30, 35, 40, 45, 50]
 rmse_results = []
 
 for seq_length in seq_lengths:
+    # 清空model
+    import os
+    import shutil
+
+    folder = './model'
+    for filename in os.listdir(folder):
+        file_path = os.path.join(folder, filename)
+        try:
+            if os.path.isfile(file_path) or os.path.islink(file_path):
+                os.unlink(file_path)
+            elif os.path.isdir(file_path):
+                shutil.rmtree(file_path)
+        except Exception as e:
+            print('Failed to delete %s. Reason: %s' % (file_path, e))
+        
     print(f"The current sequence length is: {seq_length}")
     # 创建序列
     features_seq, target_seq = create_sequences(scaled_features, scaled_target, seq_length)
@@ -190,17 +207,31 @@ for seq_length in seq_lengths:
 
 
     # In[218]:
-
-
     # 训练模型
     num_epochs = 50
     best_val_loss = float('inf')
     train_loss_list = []
     val_loss_list = []
+    
+    # 检查是否有可用的GPU
+    if torch.cuda.is_available():
+        device = torch.device("cuda:0")  # 如果有多个GPU，你可以通过改变这里的数字来选择特定的GPU
+        print("Running on the GPU")
+    else:
+        device = torch.device("cpu")
+        print("Running on the CPU")
+
+    # 将模型移动到指定的设备
+    model = model.to(device)
+
     for epoch in range(num_epochs):
         model.train()
         train_losses = []
         for inputs, targets in train_loader:
+            # 将数据移动到指定的设备
+            inputs = inputs.to(device)
+            targets = targets.to(device)
+            
             optimizer.zero_grad()
             outputs = model(inputs)
             loss = criterion(outputs, targets)
@@ -212,6 +243,10 @@ for seq_length in seq_lengths:
         val_losses = []
         with torch.no_grad():
             for inputs, targets in val_loader:
+                # 将数据移动到指定的设备
+                inputs = inputs.to(device)
+                targets = targets.to(device)
+            
                 outputs = model(inputs)
                 loss = criterion(outputs, targets)
                 val_losses.append(loss.item())
@@ -232,20 +267,9 @@ for seq_length in seq_lengths:
         # 记录两个loss
         train_loss_list.append(train_loss)
         val_loss_list.append(val_loss)
-        
-    # 在所有epochs结束后绘制损失图
-    plt.figure(figsize=(10, 6))
-    plt.plot(range(num_epochs), train_loss_list, label='Train Loss', color='blue')
-    plt.plot(range(num_epochs), val_loss_list, label='Validation Loss', color='red')
-    plt.title('Train Loss and Validation Loss')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.legend()
-    plt.show()
+    
 
     # In[187]:
-
-
     # 加载最佳模型
     model.load_state_dict(torch.load('./model/best_model.pth'))
 
@@ -258,7 +282,8 @@ for seq_length in seq_lengths:
     # 使用模型进行预测
     model.eval()
     with torch.no_grad():
-        test_predictions_new = model(torch.tensor(test_features_new, dtype=torch.float32)).numpy()
+        test_features_new = torch.tensor(test_features_new, dtype=torch.float32).to(device)
+        test_predictions_new = model(test_features_new).cpu().numpy()
 
     # 反缩放预测值
     test_predictions_new = scaler_target.inverse_transform(test_predictions_new).flatten()
